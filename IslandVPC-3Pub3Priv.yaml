@@ -1,0 +1,436 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Parameters:
+  OwnerTag:
+    Type: String
+    Default: "FirstName LastName"
+    Description: "Enter your name for the resource tags."
+  ProjectTag:
+    Type: String
+    Default: "Integration Project"
+    Description: "Enter the project name for the resource tags."
+  DeptTag:
+    Type: String
+    Default: "Department"
+    Description: "Enter your department for the resource tags."
+  NameTag:
+    Type: String
+    Default: "testpoc"
+    Description: "Enter the prefix for the name tag. (e.g. VPC will have Name tag value of [NameTag]-vpc)"
+  VPCCIDR:
+    Type: String
+    Default: "10.17.0.0/16"
+    Description: "Enter a CIDR block for the island VPC."
+  PublicSubnet1CIDR:
+    Type: String
+    Default: "10.17.0.0/19"
+    Description: "Enter a CIDR block for Public Subnet 1."
+  PublicSubnet2CIDR:
+    Type: String
+    Default: "10.17.32.0/19"
+    Description: "Enter a CIDR block for Public Subnet 2."
+  PublicSubnet3CIDR:
+    Type: String
+    Default: "10.17.64.0/19"
+    Description: "Enter a CIDR block for Public Subnet 3."
+  PrivateSubnet1CIDR:
+    Type: String
+    Default: "10.17.96.0/19"
+    Description: "Enter a CIDR block for Private Subnet 1."
+  PrivateSubnet2CIDR:
+    Type: String
+    Default: "10.17.128.0/19"
+    Description: "Enter a CIDR block for Private Subnet 2."
+  PrivateSubnet3CIDR:
+    Type: String
+    Default: "10.17.160.0/19"
+    Description: "Enter a CIDR block for Private Subnet 3."
+Description: "VPC island with three public subnets and three private subnets across three AZ's. This also creates an SSM Role and SSM Instance Profile for any EC2 instances. The Public subnets have SSM interface endpoints and the Private subnets have an S3 gateway endpoint."
+Resources:
+    VPC:
+        Type: "AWS::EC2::VPC"
+        Properties:
+            CidrBlock: !Ref VPCCIDR
+            EnableDnsSupport: true
+            EnableDnsHostnames: true
+            InstanceTenancy: "default"
+            Tags: 
+              - 
+                Key: "Owner"
+                Value: !Ref OwnerTag
+              - 
+                Key: "Project"
+                Value: !Ref ProjectTag
+              - 
+                Key: "Dept"
+                Value: !Ref DeptTag
+              - 
+                Key: "Name"
+                Value: !Sub "${NameTag}-vpc"
+    InternetGateway:
+        Type: "AWS::EC2::InternetGateway"
+        Properties:
+            Tags: 
+              - 
+                Key: "Owner"
+                Value: !Ref OwnerTag
+              - 
+                Key: "Project"
+                Value: !Ref ProjectTag
+              - 
+                Key: "Dept"
+                Value: !Ref DeptTag
+              - 
+                Key: "Name"
+                Value: !Sub "${NameTag}-igw"
+    InternetGatewayAttachment:
+        Type: 'AWS::EC2::VPCGatewayAttachment'
+        Properties:
+          VpcId: !Ref VPC
+          InternetGatewayId: !Ref InternetGateway
+    RouteTablePublic:
+        Type: "AWS::EC2::RouteTable"
+        Properties:
+            VpcId: !Ref VPC
+            Tags: 
+              - 
+                Key: "Owner"
+                Value: !Ref OwnerTag
+              - 
+                Key: "Project"
+                Value: !Ref ProjectTag
+              - 
+                Key: "Dept"
+                Value: !Ref DeptTag
+              - 
+                Key: "Name"
+                Value: !Sub "${NameTag}-rtb-public"
+    RouteTablePrivate1:
+        Type: "AWS::EC2::RouteTable"
+        Properties:
+            VpcId: !Ref VPC
+            Tags: 
+              - 
+                Key: "Name"
+                Value: !Sub "${NameTag}-rtb-priv1"
+    RouteTablePrivate2:
+        Type: "AWS::EC2::RouteTable"
+        Properties:
+            VpcId: !Ref VPC
+            Tags: 
+              - 
+                Key: "Name"
+                Value: !Sub "${NameTag}-rtb-priv2"
+    RouteTablePrivate3:
+        Type: "AWS::EC2::RouteTable"
+        Properties:
+            VpcId: !Ref VPC
+            Tags: 
+              - 
+                Key: "Name"
+                Value: !Sub "${NameTag}-rtb-priv3"
+    RouteTablePublicDefaultIPv4:
+        Type: "AWS::EC2::Route"
+        DependsOn: InternetGatewayAttachment
+        Properties:
+            DestinationCidrBlock: "0.0.0.0/0"
+            GatewayId: !Ref InternetGateway
+            RouteTableId: !Ref RouteTablePublic
+    RouteTableAssociationPublic1:
+        Type: "AWS::EC2::SubnetRouteTableAssociation"
+        Properties:
+            RouteTableId: !Ref RouteTablePublic
+            SubnetId: !Ref PublicSubnet1
+    RouteTableAssociationPublic2:
+        Type: "AWS::EC2::SubnetRouteTableAssociation"
+        Properties:
+            RouteTableId: !Ref RouteTablePublic
+            SubnetId: !Ref PublicSubnet2
+    RouteTableAssociationPublic3:
+        Type: "AWS::EC2::SubnetRouteTableAssociation"
+        Properties:
+            RouteTableId: !Ref RouteTablePublic
+            SubnetId: !Ref PublicSubnet3
+    PublicSubnet1:
+        Type: "AWS::EC2::Subnet"
+        Properties:
+            AvailabilityZone: !Select [ 0, !GetAZs '' ]
+            CidrBlock: !Ref PublicSubnet1CIDR
+            VpcId: !Ref VPC
+            MapPublicIpOnLaunch: false
+            Tags: 
+              - 
+                Key: "Name"
+                Value: !Sub "${NameTag}-pubsn1"
+    PublicSubnet2:
+        Type: "AWS::EC2::Subnet"
+        Properties:
+            AvailabilityZone: !Select [ 1, !GetAZs '' ]
+            CidrBlock: !Ref PublicSubnet2CIDR
+            VpcId: !Ref VPC
+            MapPublicIpOnLaunch: false
+            Tags: 
+              - 
+                Key: "Name"
+                Value: !Sub "${NameTag}-pubsn2"
+    PublicSubnet3:
+        Type: "AWS::EC2::Subnet"
+        Properties:
+            AvailabilityZone: !Select [ 2, !GetAZs '' ]
+            CidrBlock: !Ref PublicSubnet3CIDR
+            VpcId: !Ref VPC
+            MapPublicIpOnLaunch: false
+            Tags: 
+              - 
+                Key: "Name"
+                Value: !Sub "${NameTag}-pubsn3"
+    PrivateSubnet1:
+        Type: "AWS::EC2::Subnet"
+        Properties:
+            AvailabilityZone: !Select [ 0, !GetAZs '' ]
+            CidrBlock: !Ref PrivateSubnet1CIDR
+            VpcId: !Ref VPC
+            MapPublicIpOnLaunch: false
+            Tags: 
+              - 
+                Key: "Name"
+                Value: !Sub "${NameTag}-privsn1"
+    PrivateSubnet2:
+        Type: "AWS::EC2::Subnet"
+        Properties:
+            AvailabilityZone: !Select [ 1, !GetAZs '' ]
+            CidrBlock: !Ref PrivateSubnet2CIDR
+            VpcId: !Ref VPC
+            MapPublicIpOnLaunch: false
+            Tags: 
+              - 
+                Key: "Name"
+                Value: !Sub "${NameTag}-privsn2"
+    PrivateSubnet3:
+        Type: "AWS::EC2::Subnet"
+        Properties:
+            AvailabilityZone: !Select [ 2, !GetAZs '' ]
+            CidrBlock: !Ref PrivateSubnet3CIDR
+            VpcId: !Ref VPC
+            MapPublicIpOnLaunch: false
+            Tags: 
+              - 
+                Key: "Name"
+                Value: !Sub "${NameTag}-privsn3"
+    VPCEndpointS3:
+        Type: "AWS::EC2::VPCEndpoint"
+        Properties:
+            VpcEndpointType: "Gateway"
+            VpcId: !Ref VPC
+            ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
+            PolicyDocument: "{\"Version\":\"2008-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":\"*\",\"Action\":\"*\",\"Resource\":\"*\"}]}"
+            RouteTableIds: 
+              - !Ref RouteTablePrivate1
+              - !Ref RouteTablePrivate2
+              - !Ref RouteTablePrivate3
+            PrivateDnsEnabled: false
+    VPCEndpointSSM:
+        Type: "AWS::EC2::VPCEndpoint"
+        Properties:
+            VpcEndpointType: "Interface"
+            VpcId: !Ref VPC
+            ServiceName: !Sub "com.amazonaws.${AWS::Region}.ssm"
+            PolicyDocument: |
+                {
+                  "Statement": [
+                    {
+                      "Action": "*", 
+                      "Effect": "Allow", 
+                      "Principal": "*", 
+                      "Resource": "*"
+                    }
+                  ]
+                }
+            SubnetIds: 
+              - !Ref PublicSubnet1
+              - !Ref PublicSubnet2
+              - !Ref PublicSubnet3
+            PrivateDnsEnabled: true
+            SecurityGroupIds: 
+              - !Ref InstanceSecurityGroup
+    VPCEndpointEC2Messages:
+        Type: "AWS::EC2::VPCEndpoint"
+        Properties:
+            VpcEndpointType: "Interface"
+            VpcId: !Ref VPC
+            ServiceName: !Sub "com.amazonaws.${AWS::Region}.ec2messages"
+            PolicyDocument: |
+                {
+                  "Statement": [
+                    {
+                      "Action": "*", 
+                      "Effect": "Allow", 
+                      "Principal": "*", 
+                      "Resource": "*"
+                    }
+                  ]
+                }
+            SubnetIds: 
+              - !Ref PublicSubnet1
+              - !Ref PublicSubnet2
+              - !Ref PublicSubnet3
+            PrivateDnsEnabled: true
+            SecurityGroupIds: 
+              - !Ref InstanceSecurityGroup
+    VPCEndpointSSMMessages:
+        Type: "AWS::EC2::VPCEndpoint"
+        Properties:
+            VpcEndpointType: "Interface"
+            VpcId: !Ref VPC
+            ServiceName: !Sub "com.amazonaws.${AWS::Region}.ssmmessages"
+            PolicyDocument: |
+                {
+                  "Statement": [
+                    {
+                      "Action": "*", 
+                      "Effect": "Allow", 
+                      "Principal": "*", 
+                      "Resource": "*"
+                    }
+                  ]
+                }
+            SubnetIds: 
+              - !Ref PublicSubnet1
+              - !Ref PublicSubnet2
+              - !Ref PublicSubnet3
+            PrivateDnsEnabled: true
+            SecurityGroupIds: 
+              - !Ref InstanceSecurityGroup
+    VPCGatewayAttachment:
+        Type: "AWS::EC2::VPCGatewayAttachment"
+        Properties:
+            InternetGatewayId: !Ref InternetGateway
+            VpcId: !Ref VPC
+    RouteTableAssociationPrivate1:
+        Type: "AWS::EC2::SubnetRouteTableAssociation"
+        Properties:
+            RouteTableId: !Ref RouteTablePrivate1
+            SubnetId: !Ref PrivateSubnet1
+    RouteTableAssociationPrivate2:
+        Type: "AWS::EC2::SubnetRouteTableAssociation"
+        Properties:
+            RouteTableId: !Ref RouteTablePrivate2
+            SubnetId: !Ref PrivateSubnet2
+    RouteTableAssociationPrivate3:
+        Type: "AWS::EC2::SubnetRouteTableAssociation"
+        Properties:
+            RouteTableId: !Ref RouteTablePrivate3
+            SubnetId: !Ref PrivateSubnet3
+    InstanceSecurityGroup:
+        Type: "AWS::EC2::SecurityGroup"
+        Properties:
+            GroupDescription: !Sub "${NameTag} Security Group"
+            GroupName: !Sub "${NameTag}-sg"
+            SecurityGroupIngress:
+            - Description: 'Allow SSH IPv4 IN'
+              IpProtocol: tcp
+              FromPort: '22'
+              ToPort: '22'
+              CidrIp: '0.0.0.0/0'
+            Tags: 
+              - 
+                Key: "Dept"
+                Value: !Ref DeptTag
+              - 
+                Key: "Owner"
+                Value: !Ref OwnerTag
+              - 
+                Key: "Project"
+                Value: !Ref ProjectTag
+              - 
+                Key: "Name"
+                Value: !Sub "${NameTag}-sg"
+            VpcId: !Ref VPC
+    InstanceSecurityGroupIngressTCP: 
+        Type: AWS::EC2::SecurityGroupIngress
+        Properties:
+          GroupId: !Ref InstanceSecurityGroup
+          SourceSecurityGroupId: !Ref InstanceSecurityGroup
+          SourceSecurityGroupOwnerId: !Ref AWS::AccountId
+          FromPort: 0
+          IpProtocol: "tcp"
+          ToPort: 65535
+    InstanceSecurityGroupIngressUDP: 
+        Type: AWS::EC2::SecurityGroupIngress
+        Properties:
+          GroupId: !Ref InstanceSecurityGroup
+          SourceSecurityGroupId: !Ref InstanceSecurityGroup
+          SourceSecurityGroupOwnerId: !Ref AWS::AccountId
+          FromPort: 0
+          IpProtocol: "udp"
+          ToPort: 65535
+    InstanceSecurityGroupEgress: 
+        Type: AWS::EC2::SecurityGroupEgress
+        Properties:
+          CidrIp: "0.0.0.0/0"
+          IpProtocol: "-1"
+          GroupId: !GetAtt InstanceSecurityGroup.GroupId
+    SSMRole:
+        Type: "AWS::IAM::Role"
+        Properties:
+            Path: "/"
+            RoleName: !Sub "${NameTag}-SSM-Role"
+            AssumeRolePolicyDocument: "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"ec2.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}"
+            MaxSessionDuration: 3600
+            Policies:
+              - PolicyName: root
+                PolicyDocument:
+                  Version: 2012-10-17
+                  Statement:
+                    - Effect: Allow
+                      Action: 
+                        - 'ssm:DescribeAssociation'
+                        - 'ssm:GetDeployablePatchSnapshotForInstance'
+                        - 'ssm:GetDocument'
+                        - 'ssm:DescribeDocument'
+                        - 'ssm:GetManifest'
+                        - 'ssm:GetParameter'
+                        - 'ssm:GetParameters'
+                        - 'ssm:ListAssociations'
+                        - 'ssm:ListInstanceAssociations'
+                        - 'ssm:PutInventory'
+                        - 'ssm:PutComplianceItems'
+                        - 'ssm:PutConfigurePackageResult'
+                        - 'ssm:UpdateAssociationStatus'
+                        - 'ssm:UpdateInstanceAssociationStatus'
+                        - 'ssm:UpdateInstanceInformation'
+                      Resource: '*'
+                    - Effect: Allow
+                      Action:
+                        - 'ssmmessages:CreateControlChannel'
+                        - 'ssmmessages:CreateDataChannel'
+                        - 'ssmmessages:OpenControlChannel'
+                        - 'ssmmessages:OpenDataChannel' 
+                      Resource: '*'
+                    - Effect: Allow
+                      Action: 
+                        - 'ec2messages:AcknowledgeMessage'
+                        - 'ec2messages:DeleteMessage'
+                        - 'ec2messages:FailMessage'
+                        - 'ec2messages:GetEndpoint'
+                        - 'ec2messages:GetMessages'
+                        - 'ec2messages:SendReply'
+                      Resource: '*'
+            Description: "Allows EC2 instances to call AWS services on your behalf."
+            Tags: 
+              - 
+                Key: "Dept"
+                Value: !Ref DeptTag
+              - 
+                Key: "Project"
+                Value: !Ref ProjectTag
+              - 
+                Key: "Owner"
+                Value: !Ref OwnerTag
+    SSMInstanceProfile:
+        Type: "AWS::IAM::InstanceProfile"
+        Properties:
+            Path: "/"
+            InstanceProfileName: !Ref SSMRole
+            Roles: 
+              - !Ref SSMRole
+
